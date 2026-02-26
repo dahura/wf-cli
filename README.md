@@ -134,12 +134,3 @@ wf subagents show-models [--json]
 wf subagents list-models [--json]
 wf subagents apply-models [--json]
 ```
-
----
-
-## 🚀 Publish
-
-```bash
-bun run build
-npm publish --access public
-```

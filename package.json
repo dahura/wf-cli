@@ -1,8 +1,16 @@
 {
   "name": "@dahura/wf-cli",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Agent workflow CLI for plan/state orchestration and multi-agent asset scaffolding.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dahura/wf-cli.git"
+  },
+  "homepage": "https://github.com/dahura/wf-cli#readme",
+  "bugs": {
+    "url": "https://github.com/dahura/wf-cli/issues"
+  },
   "type": "module",
   "bin": {
     "wf": "bin/wf.js"
