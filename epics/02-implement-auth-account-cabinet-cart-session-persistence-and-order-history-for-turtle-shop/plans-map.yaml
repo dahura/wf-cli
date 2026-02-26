@@ -1,0 +1,6 @@
+plans:
+  - 13-implement-user-authentication-flows-sign-up-sign-in-sign-out-guarded-routes-and-session-handling
+  - 14-build-account-cabinet-pages-and-apis-for-profile-viewing-editing-and-account-level-navigation
+  - 15-add-cart-session-persistence-so-cart-state-survives-reloads-browser-restarts-and-authenticated-session-transitions
+  - 16-implement-order-history-in-account-cabinet-including-order-list-and-order-details-with-status-and-totals
+  - 17-add-or-update-tests-and-validation-coverage-for-the-new-auth-cart-persistence-and-order-history-flows

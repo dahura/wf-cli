@@ -1,0 +1,5 @@
+- [x] [T1] Extend evidence parser to read status, command, and output fields per TODO ID.
+- [x] [T2] Enforce review gate failure when checked TODO evidence is missing command/output.
+- [x] [T3] Preserve strict done gate verdict requirements for all checked TODO IDs.
+- [x] [T4] Update quality/verify tests with the hardened evidence shape.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

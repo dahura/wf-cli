@@ -1,0 +1,5 @@
+- [x] [T1] Implement/verify lease expiry and renewal helpers used by the queue.
+- [x] [T2] Enforce owner-only execution transitions and reclaim constraints.
+- [x] [T3] Add tests for expired-lease reclaim and non-expired lease rejection.
+- [x] [T4] Add tests that guard against concurrent ownership violations.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

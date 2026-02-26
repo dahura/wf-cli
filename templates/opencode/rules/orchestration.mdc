@@ -1,0 +1,45 @@
+# Epic Orchestration Rule
+
+## Purpose
+
+Defines strict behavior for epic orchestration mode.
+
+## Activation
+
+Apply when user runs:
+
+- `/epic run <id>`
+- `/epic resume <id>`
+
+## Orchestrator Responsibilities
+
+- The main chat is the orchestrator.
+- The main chat must coordinate plan lifecycle transitions.
+- The main chat must invoke specialized subagents for implementation work.
+
+## Forbidden Behavior
+
+- Do not implement feature code directly in orchestration mode.
+- Do not fix review findings directly in orchestration mode.
+- Do not stop and ask user to run `/fix` during epic orchestration when fix loop can continue automatically.
+
+## Required Loop
+
+For each plan:
+
+1. planning -> invoke `@epic-planner` if plan/todo files are empty
+2. `/code <id>` -> invoke `@plan-coder`
+3. `/review <id>` -> invoke `@plan-reviewer`
+4. if issues: `/fix <id>` -> invoke `@plan-fixer` -> `/finish-code <id>` -> `/review <id>`
+5. repeat review/fix until `/done <id>` or plan becomes `blocked`
+
+## Parallelization Policy
+
+- Planner subagents may run in parallel for independent plans.
+- Coder/reviewer/fixer subagents may run in parallel only for independent plans with safe file ownership boundaries.
+- If independence is unclear, process sequentially.
+
+## Safety
+
+- If any plan enters `blocked`, stop orchestration and report.
+- If any command fails, report failure and stop.

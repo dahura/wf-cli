@@ -1,0 +1,42 @@
+{
+  "name": "@dahura/wf-cli",
+  "version": "0.3.2",
+  "description": "Agent workflow CLI for plan/state orchestration and multi-agent asset scaffolding.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "wf": "bin/wf.js"
+  },
+  "files": [
+    "dist",
+    "templates",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "bun src/cli.ts",
+    "build": "bun build ./src/cli.ts --target=bun --outfile=dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "wf": "bun src/cli.ts",
+    "sync": "bun src/cli.ts sync",
+    "init": "bun src/cli.ts init",
+    "prepublishOnly": "bun run build"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "keywords": [
+    "workflow",
+    "cli",
+    "agents",
+    "cursor",
+    "opencode",
+    "plans"
+  ],
+  "devDependencies": {
+    "@types/bun": "^1.3.9",
+    "@types/node": "^25.2.3",
+    "typescript": "^5.9.3"
+  }
+}

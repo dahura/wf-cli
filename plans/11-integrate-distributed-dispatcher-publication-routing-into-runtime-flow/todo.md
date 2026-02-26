@@ -1,0 +1,5 @@
+- [x] [T1] Add dispatcher helper that publishes command jobs from plan phase transitions.
+- [x] [T2] Integrate publication into epic orchestration and runtime transition commands.
+- [x] [T3] Keep publication gated by `WF_DISTRIBUTED=1`.
+- [x] [T4] Add dispatcher tests for enabled/disabled execution paths.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

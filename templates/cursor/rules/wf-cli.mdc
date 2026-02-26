@@ -1,0 +1,41 @@
+---
+description: Mandatory workflow instructions using wf-cli for planning, coding, and reviewing tasks.
+globs: *
+---
+# wf-cli Workflow Rule
+
+## Purpose
+This project uses `wf-cli` to orchestrate AI-agent tasks, epics, and state management. 
+You MUST use `wf-cli` commands to transition between states. NEVER create or move plan files manually.
+
+## 🔄 The Standard Workflow
+When the user asks you to implement a feature, fix a bug, or do a task, follow this strict lifecycle:
+
+1. **Plan:** `bun run wf plan "<description>"`
+   - Generates the plan structure. Read the generated `plan.md` and `todo.md`.
+2. **Code:** `bun run wf code <id>`
+   - Transitions state to coding. Implement the code.
+   - Check off items in `todo.md` using explicit IDs (e.g., `- [x] [T1] ...`).
+3. **Verify:** `bun run wf verify <id> --target=all`
+   - Runs quality gates. Ensure `evidence.md` has matching `## <ID>` sections with `- status: pass`.
+4. **Finish Code:** `bun run wf finish-code <id>`
+   - Locks the coding phase. Fails if TODOs or evidence are incomplete.
+5. **Review:** `bun run wf review <id>`
+   - Fill out `review.md` with verdicts for each TODO (e.g., `- [T1]: pass`).
+6. **Done:** `bun run wf done <id>`
+   - Marks the plan as successfully completed.
+
+## 📚 Epics (For large features)
+- Create epic: `bun run wf epic "<description>"`
+- Attach plan to epic: `bun run wf plan "<description>" --epic <epic-id>`
+- Check epic status: `bun run wf epic status <id>`
+- Run epic orchestrator: `bun run wf epic run <id>`
+
+## 🛠️ Subagents & Models
+- Initialize/Validate models: `bun run wf subagents validate-models`
+- List models: `bun run wf subagents list-models`
+
+## ⚠️ Critical Constraints
+- ALWAYS use `bun run wf <command>` (assuming it's in package.json) or `bunx wf-cli <command>`.
+- The `<id>` can be short (e.g., `7`, `07`) or full (`07-my-plan`).
+- If you are unsure about a command, run `bun run wf --help` or `bun run wf <command> --help` before proceeding.

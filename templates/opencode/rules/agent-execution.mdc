@@ -1,0 +1,82 @@
+# Agent Execution — Mandatory Terminal Enforcement
+
+## Purpose
+
+This rule binds **workflow commands** to **real terminal execution**.
+
+The agent MUST NOT simulate state changes or validations.
+All enforcement MUST be delegated to the Bun runtime.
+
+---
+
+## Core Rule
+
+For any workflow-related command:
+
+- /set-model
+- /update-model
+- /who-are-you
+- epic
+- plan
+- code
+- finish-code
+- verify
+- subagents
+- review
+- fix
+- done
+
+The agent MUST:
+
+1. Translate the command into a terminal command
+2. Execute it using the integrated terminal
+3. Read stdout / stderr
+4. STOP immediately on failure
+5. Continue reasoning ONLY after successful execution
+
+---
+
+## Required Terminal Entry Point
+
+All commands MUST be executed via:
+
+```
+bun run wf <command> <args>
+```
+
+No other execution paths are allowed.
+
+---
+
+## Forbidden Behavior
+
+- Simulating execution
+- Inferring permissions without terminal output
+- Modifying state without execution
+- Skipping execution due to confidence
+
+---
+
+## Failure Handling
+
+If terminal execution fails:
+
+- The agent MUST report the error verbatim
+- The agent MUST NOT continue workflow reasoning
+
+---
+
+## Epic Orchestration Mode
+
+When `/epic run` or `/epic resume` is active:
+
+- The main chat is the orchestrator.
+- The main chat MUST NOT implement or fix feature code directly.
+- The main chat MUST invoke specialized subagents for planning/coding/review/fixing work.
+- Review findings inside epic orchestration MUST continue the loop automatically (`/fix` -> `/finish-code` -> `/review`) until completion or blocked state.
+
+Parallel policy:
+
+- Planner fan-out is allowed for independent plans.
+- Coding/review/fixing fan-out is allowed only for plans proven independent and safe for concurrent writes.
+- If independence is unclear, run sequentially.

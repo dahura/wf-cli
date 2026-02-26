@@ -1,0 +1,24 @@
+{
+  "phase": "completed",
+  "created_at": "2026-02-20",
+  "plan_ids": [
+    "01-define-a-distributed-orchestration-contract-for-jobs-lifecycle-transitions-and-idempotency",
+    "02-job-lifecycle-queued-claimed-running-succeeded-failed-stalled",
+    "03-idempotency-key-format-and-duplicate-suppression-rules",
+    "04-ownership-lease-rules-to-prevent-concurrent-execution-of-the-same-work-item",
+    "05-introduce-queue-abstraction-and-dispatcher-loop-in-wf-cli",
+    "06-dispatcher-maps-plan-phases-to-role-specific-jobs-and-publishes-work-items",
+    "07-support-feature-flagged-mode-wf-distributed-1-enables-distributed-orchestration",
+    "08-add-worker-runtime-commands-for-long-lived-consumers",
+    "09-introduce-todo-lifecycle-statuses-pending-implemented-accepted-with-strict-ownership",
+    "10-enforce-hard-review-and-done-quality-gates-with-code-and-test-evidence",
+    "11-integrate-distributed-dispatcher-publication-routing-into-runtime-flow",
+    "12-add-wf-worker-long-lived-consumer-loop-with-lease-heartbeat-and-retries"
+  ],
+  "orchestration": {
+    "status": "completed",
+    "updated_at": "2026-02-20T20:24:58.609Z",
+    "started_at": "2026-02-20T15:16:19.219Z",
+    "last_run_summary": "All linked plans are completed."
+  }
+}

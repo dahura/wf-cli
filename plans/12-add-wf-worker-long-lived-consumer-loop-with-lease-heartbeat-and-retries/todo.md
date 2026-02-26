@@ -1,0 +1,5 @@
+- [x] [T1] Add `wf worker` command argument parsing and runtime integration.
+- [x] [T2] Implement long-lived claim/start/execute/complete-fail worker loop by role.
+- [x] [T3] Add lease heartbeat and expired in-flight recovery via stall/requeue flow.
+- [x] [T4] Add worker loop tests for role-allowed command execution.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

@@ -1,0 +1,5 @@
+- [x] [T1] Specify canonical `dedupe_key` format and parsing expectations in code and tests.
+- [x] [T2] Ensure enqueue duplicate suppression returns existing job with `deduped: true`.
+- [x] [T3] Enforce/verify `request_id` usage for retry-safe transition operations.
+- [x] [T4] Add/extend tests for key round-trip, malformed keys, and dedupe behavior.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

@@ -1,0 +1,5 @@
+- [x] [T1] Provide queue implementation and storage path for distributed jobs.
+- [x] [T2] Expose queue creation and dispatcher helper surfaces in core modules.
+- [x] [T3] Add tests for enqueue, claim, and persistence behavior.
+- [x] [T4] Verify compatibility with contract and lifecycle invariants.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

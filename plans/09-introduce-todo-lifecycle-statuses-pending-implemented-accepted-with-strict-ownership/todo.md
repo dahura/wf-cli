@@ -1,0 +1,5 @@
+- [x] [T1] Add TODO lifecycle derivation utility with statuses `pending`, `implemented`, `accepted`.
+- [x] [T2] Encode strict ownership mapping for lifecycle states (`implementer` vs `reviewer`).
+- [x] [T3] Expose derived TODO lifecycle data in `wf context` output.
+- [x] [T4] Add lifecycle-focused unit tests.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

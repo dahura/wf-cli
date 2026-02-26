@@ -1,0 +1,5 @@
+- [x] [T1] Implement and export distributed mode feature flag helpers.
+- [x] [T2] Guard distributed queue/dispatcher behavior behind flag checks.
+- [x] [T3] Add tests for flag-enabled and flag-disabled execution paths.
+- [x] [T4] Confirm no regressions in default workflow behavior.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

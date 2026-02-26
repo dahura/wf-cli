@@ -1,0 +1,67 @@
+---
+alwaysApply: true
+---
+
+# Context7 Usage Rule
+
+## Purpose
+
+This rule defines when and how to use Context7 MCP tools
+for retrieving up-to-date documentation and code examples.
+
+---
+
+## When to Use Context7
+
+### Always use for:
+- External library APIs (Drizzle, Next.js, Elysia, React Query, etc.)
+- Setup and configuration steps
+- Algorithms and data structures (sorting, searching, trees, etc.)
+- Design patterns and best practices
+- Migration between library versions
+- New features of known libraries
+
+### Examples:
+- "How to use Drizzle `eq()` with multiple conditions?"
+- "What's the best sorting algorithm for nearly sorted data?"
+- "How to configure Next.js App Router middleware?"
+
+---
+
+## When NOT to Use Context7
+
+### Skip for:
+- Project-specific business rules (your domain logic from requirements)
+- Reading and understanding your own codebase
+- Simple TypeScript/JavaScript syntax questions
+
+### Examples:
+- "Why is premium discount calculated wrong?" → Read your code
+- "What does this function do?" → Read the file
+- Business logic defined in your specs, not in libraries
+
+---
+
+## Usage by Plan Mode
+
+| Mode | Context7 Usage |
+|------|----------------|
+| Plan | Research implementation approaches with libraries |
+| Code | Look up API details during implementation |
+| Review | Verify against current library best practices |
+
+---
+
+## How to Use
+
+1. First call `resolve-library-id` with library name
+2. Then call `query-docs` with the resolved ID
+3. Use the returned documentation in your response
+
+---
+
+## Summary
+
+- Use Context7 for libraries, algorithms, patterns
+- Skip for your own business logic and domain rules
+- Automatically invoke without user asking

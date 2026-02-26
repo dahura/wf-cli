@@ -1,0 +1,5 @@
+- [x] [T1] Define and expose role-specific command filters for distributed workers.
+- [x] [T2] Implement dispatcher mapping from phase transitions to queued jobs.
+- [x] [T3] Ensure job targets include plan iteration and workflow command identity.
+- [x] [T4] Add tests for routing/filter behavior and mapping correctness.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

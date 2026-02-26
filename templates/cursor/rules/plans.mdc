@@ -1,0 +1,118 @@
+---
+alwaysApply: false
+---
+# Plans — Workflow Constitution
+
+## Purpose
+
+This document is the authoritative execution policy for plan lifecycle in `wf-cli`.
+It defines allowed phase transitions, mandatory checks, and TODO lifecycle ownership.
+
+This file is a policy contract, not a trigger command.
+
+---
+
+## When This Rule Applies
+
+This rule MUST be applied when:
+- The user issues execution commands (`/epic`, `/plan`, `/code`, `/finish-code`, `/review`, `/fix`, `/done`, `/todo`, `/verify`)
+- The agent is managing plan lifecycle or mutating plan state
+- The agent is deciding whether a TODO or phase action is allowed
+
+---
+
+## Non-Negotiable Rules
+
+### Phase transitions are isolated
+- You MUST NOT change phase and then continue working in the SAME run.
+- Any phase transition command must be the final mutation action of that run.
+
+### Phase changes are CLI-only
+- You MUST NOT modify `state.json` directly to change phases.
+- Use only `wf` commands for phase changes.
+
+### Mandatory identity check
+- Before starting work in any phase and before any phase-changing command, run `bun run wf who-are-you`.
+- If model capability does not match intended action, STOP.
+
+---
+
+## TODO Lifecycle Policy
+
+TODO status model:
+- `pending` — not implemented yet
+- `implemented` — coder/fixer completed work with evidence
+- `accepted` — reviewer validated implementation depth/quality
+
+Ownership:
+- Only coder/fixer can run `wf todo implemented ...`
+- Only reviewer can run `wf todo accept ...` or `wf todo reject ...`
+- Coder/fixer MUST NEVER mark TODO as accepted
+
+Implementation proof:
+- `wf todo implemented` must include `--test` and `--output`.
+- Evidence for implemented TODO must remain present in `evidence.md` with pass status, command, and output.
+
+Review depth:
+- Reviewer MUST inspect implementation quality and behavior, not only checklist consistency.
+- Reviewer may reject TODOs even when evidence exists if quality/coverage is insufficient.
+
+---
+
+## Capability Rules by Phase
+
+### Planning-capable models
+- Allowed only in `planning`
+- Must not implement, review, or fix
+
+### Coding-capable models
+- Allowed only in `coding`
+- Must implement TODOs and mark them via `wf todo implemented`
+- Must not accept/reject TODOs
+- Before `finish-code`, all TODOs must be `implemented` or `accepted`
+
+### Fixing-capable models
+- Allowed only in `fixing`
+- Must only address review findings and rejected TODOs
+- Must re-mark fixed items via `wf todo implemented`
+
+### Reviewing-capable models
+- Allowed only in `reviewing`
+- Must run TODO-level acceptance (`wf todo accept/reject`)
+- `done` is allowed only when all TODOs are accepted and no unresolved issues remain
+
+### Completing-capable models
+- Used only for terminal completion command `done`
+
+---
+
+## Allowed Phase Transitions
+
+| From | Command | To |
+|------|---------|----|
+| planning | code | coding |
+| coding | finish-code | awaiting_review |
+| awaiting_review | review | reviewing |
+| reviewing | fix | fixing |
+| reviewing | done | completed |
+| reviewing | block | blocked |
+| fixing | finish-code | awaiting_review |
+| blocked | fix | fixing |
+
+Any other transition is invalid.
+
+---
+
+## Enforced Gates
+
+- `finish-code` fails if review gate fails.
+- `done` fails if review/done gate fails.
+- Preflight failures on subagent templates/models must block epic run/resume.
+
+---
+
+## Summary
+
+- Commands enforce state transitions.
+- Rules enforce policy and ownership.
+- Agents must follow this policy exactly.

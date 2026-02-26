@@ -1,0 +1,59 @@
+---
+alwaysApply: false
+---
+# Sync Rules — Multi-Editor Rules Sync
+
+## Purpose
+
+This file initializes and defines a **multi-way synchronization**
+between rule sets for:
+
+- Cursor (`.cursor/rules/*.mdc`)
+- KiloCode (`.kilocode/rules/*.md`)
+- OpenCode (`.opencode/rules/*.md`)
+- Antigravity (`.agents/rules/*.md`, `.agents/skills/*.md`, etc.)
+
+All `.agents` subfolders (rules, skills, etc.) use the same sync logic and structure; files use `.md` extension.
+
+After initialization, all sides are equal.
+No editor is a permanent source of truth.
+
+---
+
+## Initialization
+
+On first execution:
+- Create missing rules folders
+- Generate missing sync files
+- Strip editor-specific syntax where required
+
+---
+
+## Sync Behavior
+
+- Multi-way synchronization (Cursor ↔ KiloCode ↔ OpenCode ↔ Antigravity `.agents`)
+- Latest modified file wins
+- Semantic content only is synchronized
+- Editor-specific syntax is adapted per target
+
+---
+
+## Conflict Resolution
+
+- Newer timestamp wins
+- Equal timestamps → Cursor version preferred
+- Conflicts are logged
+
+---
+
+## Safety Rules
+
+- Never delete files automatically
+- Never sync outside rules folders or `.agents` subfolders
+- Never mix formats
+
+---
+
+## Summary
+
+This file bootstraps the sync process. The `.agents` folder (Antigravity) participates with the same behavior: equivalent subfolders like `rules`, `skills`, etc., and `.md` files only.

@@ -1,0 +1,5 @@
+- [x] [T1] Add worker CLI command(s) for long-lived distributed consumers by role.
+- [x] [T2] Implement claim -> start -> execute -> complete/fail loop with retry-safe transitions.
+- [x] [T3] Add lease heartbeat and graceful shutdown handling for running jobs.
+- [x] [T4] Add tests for worker loop behavior and error handling.
+- [x] [T5] Ensure `bun test` and `bun run typecheck` pass.

@@ -1,0 +1,77 @@
+---
+alwaysApply: true
+---
+## Source of Truth
+
+- The single source of truth for the agent is:
+  `.cursor/session/state.json`
+
+- Chat history MUST be ignored if it conflicts with session state
+
+---
+
+## Mandatory Session Validation
+
+Before executing ANY action command:
+
+- epic
+- plan
+- code
+- finish-code
+- verify
+- review
+- fix
+- done
+
+The system MUST:
+
+1. Read `.cursor/session/state.json`
+2. Validate that the agent has the required capability
+3. Reject the command if the capability is missing
+4. STOP immediately on rejection
+
+---
+
+## Capabilities
+
+Capabilities define what the agent may do.
+
+| Capability | Allows |
+|----------|-------|
+| planning | create or update plans |
+| coding | implement tasks |
+| reviewing | review implementations |
+| fixing | fix issues |
+| completing | mark tasks completed |
+
+---
+
+## Model → Capability Mapping
+
+| Model | Capabilities |
+|------|-------------|
+| opus | planning, reviewing, completing |
+| sonnet 4.5 | planning, reviewing, completing |
+| sonnet | coding, fixing |
+| minimax | coding, fixing |
+| gemini | coding, fixing |
+| GPT-5.2 | planning, coding, reviewing, fixing, completing |
+
+---
+
+## Session Commands
+
+- `/set-model` initializes the agent model
+- `/update-model` updates the agent model
+- `/who-are-you` reports current agent state
+
+Session commands operate ONLY on session state.
+They MUST NOT read or modify task states.
+
+---
+
+## Forbidden Behavior
+
+- The agent MUST NOT infer its identity
+- The agent MUST NOT modify session state directly
+- The agent MUST NOT bypass capability checks

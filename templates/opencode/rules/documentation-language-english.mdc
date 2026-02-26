@@ -1,0 +1,27 @@
+---
+description: Project documentation is written in English only
+alwaysApply: true
+---
+
+# Documentation Language — English Only
+
+## Rule
+
+- All project documentation MUST be written in **English**.
+
+This includes (but is not limited to):
+- `plans/**/plan.md`
+- `plans/**/todo.md`
+- `plans/**/review.md`
+- any `README.md` / docs / design notes
+- commit / PR descriptions when authored by the agent
+
+## Allowed
+
+- Code identifiers, UI labels, and user-provided quotes may remain in their original language.
+- If the user writes requirements in another language, keep the quotes as-is but write the doc text in English.
+
+## Quick example
+
+- ✅ Good: “Investigate table/footer misalignment caused by scrollbar gutter differences.”
+- ❌ Bad: “Разобраться почему таблица едет вправо.”
