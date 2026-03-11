@@ -1,5 +1,6 @@
 import { join } from "path";
-import { exists, readText } from "./io";
+import { exists, readJson, readText } from "./io";
+import type { QualityRunArtifact } from "./quality-run";
 
 type TodoItem = {
   checked: boolean;
@@ -19,6 +20,14 @@ type QualityResult = {
   errors: string[];
 };
 
+type ReviewContractSection = {
+  intent_match?: EvidenceStatus;
+  behavior_match?: EvidenceStatus;
+  test_adequacy?: EvidenceStatus;
+  risk?: "low" | "medium" | "high";
+  code_refs?: string;
+};
+
 const TODO_PATTERN = /^\s*-\s*\[( |x|X)\]\s+(.*)\s*$/;
 const TODO_ID_PATTERN = /^\[([A-Za-z][A-Za-z0-9._-]*)\]\s+(.*)$/;
 const EVIDENCE_SECTION_PATTERN = /^##\s+([A-Za-z][A-Za-z0-9._-]*)\s*$/;
@@ -27,6 +36,13 @@ const EVIDENCE_COMMAND_PATTERN = /^\s*-\s*command:\s*`?(.+?)`?\s*$/i;
 const EVIDENCE_OUTPUT_PATTERN = /^\s*-\s*output:\s*(.+)\s*$/i;
 const REVIEW_VERDICT_PATTERN =
   /^\s*-\s*\[([A-Za-z][A-Za-z0-9._-]*)\]\s*:\s*(pass|fail|partial)\s*$/i;
+const REVIEW_SECTION_PATTERN = /^##\s+([A-Za-z][A-Za-z0-9._-]*)\s*$/;
+const REVIEW_INTENT_PATTERN = /^\s*-\s*intent_match:\s*(pass|fail|partial)\s*$/i;
+const REVIEW_BEHAVIOR_PATTERN = /^\s*-\s*behavior_match:\s*(pass|fail|partial)\s*$/i;
+const REVIEW_TEST_ADEQUACY_PATTERN = /^\s*-\s*test_adequacy:\s*(pass|fail|partial)\s*$/i;
+const REVIEW_RISK_PATTERN = /^\s*-\s*risk:\s*(low|medium|high)\s*$/i;
+const REVIEW_CODE_REFS_PATTERN = /^\s*-\s*code_refs:\s*(.+)\s*$/i;
+const REVIEW_STRICT_MARKER_PATTERN = /^\s*-\s*strict:\s*(true|false)\s*$/im;
 
 function parseTodoItems(content: string): TodoItem[] {
   const items: TodoItem[] = [];
@@ -112,6 +128,170 @@ function parseReviewVerdicts(content: string): Map<string, EvidenceStatus> {
   }
 
   return verdicts;
+}
+
+function parseReviewContractSections(content: string): Map<string, ReviewContractSection> {
+  const sections = new Map<string, ReviewContractSection>();
+  let currentId: string | null = null;
+
+  for (const line of content.split("\n")) {
+    const sectionMatch = line.match(REVIEW_SECTION_PATTERN);
+    if (sectionMatch) {
+      currentId = sectionMatch[1];
+      sections.set(currentId, {});
+      continue;
+    }
+    if (!currentId) continue;
+
+    const intentMatch = line.match(REVIEW_INTENT_PATTERN);
+    if (intentMatch) {
+      const section = sections.get(currentId) ?? {};
+      section.intent_match = intentMatch[1].toLowerCase() as EvidenceStatus;
+      sections.set(currentId, section);
+      continue;
+    }
+    const behaviorMatch = line.match(REVIEW_BEHAVIOR_PATTERN);
+    if (behaviorMatch) {
+      const section = sections.get(currentId) ?? {};
+      section.behavior_match = behaviorMatch[1].toLowerCase() as EvidenceStatus;
+      sections.set(currentId, section);
+      continue;
+    }
+    const testAdequacyMatch = line.match(REVIEW_TEST_ADEQUACY_PATTERN);
+    if (testAdequacyMatch) {
+      const section = sections.get(currentId) ?? {};
+      section.test_adequacy = testAdequacyMatch[1].toLowerCase() as EvidenceStatus;
+      sections.set(currentId, section);
+      continue;
+    }
+    const riskMatch = line.match(REVIEW_RISK_PATTERN);
+    if (riskMatch) {
+      const section = sections.get(currentId) ?? {};
+      section.risk = riskMatch[1].toLowerCase() as "low" | "medium" | "high";
+      sections.set(currentId, section);
+      continue;
+    }
+    const codeRefsMatch = line.match(REVIEW_CODE_REFS_PATTERN);
+    if (codeRefsMatch) {
+      const section = sections.get(currentId) ?? {};
+      section.code_refs = codeRefsMatch[1].trim();
+      sections.set(currentId, section);
+    }
+  }
+
+  return sections;
+}
+
+function isStrictReviewEnabled(reviewContent: string): boolean {
+  const marker = reviewContent.match(REVIEW_STRICT_MARKER_PATTERN);
+  if (!marker) return false;
+  return marker[1].toLowerCase() === "true";
+}
+
+function parseIsoDate(value: string): number | null {
+  const t = Date.parse(value);
+  return Number.isNaN(t) ? null : t;
+}
+
+function validateReviewContractForTodo(
+  todoId: string,
+  reviewSections: Map<string, ReviewContractSection>,
+): string[] {
+  const errors: string[] = [];
+  const section = reviewSections.get(todoId);
+  if (!section) {
+    return [`review.md is missing detailed section for TODO ID '${todoId}' (expected '## ${todoId}').`];
+  }
+
+  if (!section.intent_match) {
+    errors.push(`review.md section '${todoId}' is missing '- intent_match: pass|fail|partial'.`);
+  } else if (section.intent_match !== "pass") {
+    errors.push(`review.md section '${todoId}' has intent_match='${section.intent_match}', expected 'pass'.`);
+  }
+
+  if (!section.behavior_match) {
+    errors.push(`review.md section '${todoId}' is missing '- behavior_match: pass|fail|partial'.`);
+  } else if (section.behavior_match !== "pass") {
+    errors.push(`review.md section '${todoId}' has behavior_match='${section.behavior_match}', expected 'pass'.`);
+  }
+
+  if (!section.test_adequacy) {
+    errors.push(`review.md section '${todoId}' is missing '- test_adequacy: pass|fail|partial'.`);
+  } else if (section.test_adequacy !== "pass") {
+    errors.push(`review.md section '${todoId}' has test_adequacy='${section.test_adequacy}', expected 'pass'.`);
+  }
+
+  if (!section.risk) {
+    errors.push(`review.md section '${todoId}' is missing '- risk: low|medium|high'.`);
+  }
+
+  if (!section.code_refs || section.code_refs.toLowerCase() === "none") {
+    errors.push(`review.md section '${todoId}' is missing non-empty '- code_refs: ...'.`);
+  }
+
+  return errors;
+}
+
+export async function validateStrictQualityArtifact(
+  planPath: string,
+  options?: { ttlMs?: number },
+): Promise<QualityResult> {
+  const artifactPath = join(planPath, "quality-run.json");
+  const ttlMs = options?.ttlMs ?? 2 * 60 * 60 * 1000;
+  if (!(await exists(artifactPath))) {
+    return {
+      ok: false,
+      errors: ["quality-run.json is missing for strict review."],
+    };
+  }
+
+  const artifact = await readJson<QualityRunArtifact>(artifactPath);
+  const errors: string[] = [];
+  if (artifact.mode !== "strict") {
+    errors.push("quality-run.json has invalid mode; expected 'strict'.");
+  }
+  if (!artifact.ok) {
+    errors.push("quality-run.json reports failed strict checks.");
+  }
+  if (!artifact.created_at) {
+    errors.push("quality-run.json is missing created_at.");
+  } else {
+    const createdAt = parseIsoDate(artifact.created_at);
+    if (createdAt === null) {
+      errors.push("quality-run.json created_at is not a valid ISO timestamp.");
+    } else if (Date.now() - createdAt > ttlMs) {
+      errors.push("quality-run.json is stale. Re-run strict review checks.");
+    }
+  }
+
+  const failedChecks = artifact.checks?.filter((check) => check.exit_code !== 0) ?? [];
+  if (failedChecks.length > 0) {
+    errors.push(
+      `quality-run.json contains failed checks: ${failedChecks.map((check) => check.name).join(", ")}.`,
+    );
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+  };
+}
+
+export async function validateTodoReviewEvidence(planPath: string, todoId: string): Promise<QualityResult> {
+  const reviewPath = join(planPath, "review.md");
+  if (!(await exists(reviewPath))) {
+    return {
+      ok: false,
+      errors: ["review.md is missing in plan directory."],
+    };
+  }
+
+  const reviewContent = await readText(reviewPath);
+  const errors = validateReviewContractForTodo(todoId, parseReviewContractSections(reviewContent));
+  return {
+    ok: errors.length === 0,
+    errors,
+  };
 }
 
 export async function validatePlanReadyForReview(planPath: string): Promise<QualityResult> {
@@ -226,6 +406,7 @@ export async function validatePlanReadyForDone(planPath: string): Promise<Qualit
 
   const duplicateCheckedIds = collectDuplicateIds(checkedTodoIds);
   const verdicts = parseReviewVerdicts(reviewContent);
+  const reviewSections = parseReviewContractSections(reviewContent);
 
   const errors: string[] = [];
   if (checkedTodoIds.length === 0) {
@@ -245,7 +426,14 @@ export async function validatePlanReadyForDone(planPath: string): Promise<Qualit
     }
     if (verdict !== "pass") {
       errors.push(`review.md verdict for TODO ID '${id}' is '${verdict}', expected 'pass'.`);
+      continue;
     }
+    errors.push(...validateReviewContractForTodo(id, reviewSections));
+  }
+
+  if (isStrictReviewEnabled(reviewContent)) {
+    const strictValidation = await validateStrictQualityArtifact(planPath);
+    errors.push(...strictValidation.errors);
   }
 
   return {

@@ -1,6 +1,6 @@
 {
   "name": "@dahura/wf-cli",
-  "version": "0.3.3",
+  "version": "0.3.6",
   "description": "Agent workflow CLI for plan/state orchestration and multi-agent asset scaffolding.",
   "license": "MIT",
   "repository": {

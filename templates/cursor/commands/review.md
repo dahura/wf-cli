@@ -4,11 +4,20 @@ Starts review phase.
 
 ## Usage
 /review <plan-number-or-slug>
+/review <plan-number-or-slug> --strict [--profile fast|default|full]
 
 ## Behavior
-- Calls `bun run wf review <id>`
+- Calls `bun run wf review <id> [--strict --profile ...]`
 - Agent MUST immediately call `bun run wf context <id> --json --include=plan,todo,review,evidence,state`
 - Agent creates/updates `plans/<resolved-plan-dir>/review.md`
+- Agent MUST report findings first (ordered by severity)
+- Agent MUST include per-TODO quality sections for each checked TODO:
+  - `## T1`
+  - `- intent_match: pass|fail|partial`
+  - `- behavior_match: pass|fail|partial`
+  - `- test_adequacy: pass|fail|partial`
+  - `- risk: low|medium|high`
+  - `- code_refs: <file/symbol references>`
 - Agent MUST include verdict lines for each checked TODO ID: `- [T1]: pass|fail|partial`
 - Agent MUST NOT implement fixes
 

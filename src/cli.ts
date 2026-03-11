@@ -7,19 +7,21 @@ const repoRoot = process.cwd();
 
 process.chdir(repoRoot);
 
-if (command === "init") {
+const wantsHelp = args.includes("--help") || args.includes("-h");
+
+if (command === "init" && !wantsHelp) {
   const force = args.includes("--force");
   await runInitWithOptions(repoRoot, { force });
   process.exit(0);
 }
 
-if (command === "sync") {
+if (command === "sync" && !wantsHelp) {
   const reseed = args.includes("--reseed");
   await runSync(repoRoot, { reseed });
   process.exit(0);
 }
 
-if (command === "skill" && args[1] === "sync") {
+if (command === "skill" && args[1] === "sync" && !wantsHelp) {
   await runSkillSync(repoRoot);
   process.exit(0);
 }

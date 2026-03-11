@@ -60,13 +60,25 @@ describe("todo lifecycle commands", () => {
     await writePlanFiles({
       phase: "reviewing",
       todo: "- [x] [T1] add worker command\n",
-      review: "# Review\n",
+      review:
+        "# Review\n\n## T1\n- intent_match: pass\n- behavior_match: pass\n- test_adequacy: pass\n- risk: low\n- code_refs: src/core/worker.ts\n",
     });
     const result = await markTodoAccepted(planDir, "T1", "reviewed");
     const lifecycle = result.lifecycle.find((item) => item.id === "T1");
     expect(lifecycle?.status).toBe("accepted");
     const review = await Bun.file(join(planDir, "review.md")).text();
     expect(review).toContain("- [T1]: pass");
+  });
+
+  it("rejects acceptance when review evidence block is missing", async () => {
+    await writePlanFiles({
+      phase: "reviewing",
+      todo: "- [x] [T1] add worker command\n",
+      review: "# Review\n",
+    });
+    await expect(markTodoAccepted(planDir, "T1")).rejects.toThrow(
+      "without complete review evidence",
+    );
   });
 
   it("rejects TODO in reviewing and makes it pending", async () => {

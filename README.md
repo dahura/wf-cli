@@ -54,7 +54,7 @@ bun run wf:init
 4. **Finish Coding:**  
    `bun run wf finish-code <id>`
 5. **Review Implementation:**  
-   `bun run wf review <id>`  
+   `bun run wf review <id> --strict --profile default`  
    *(Requires `review.md` to have `pass` verdicts for all TODOs)*
 6. **Complete:**  
    `bun run wf done <id>`
@@ -70,6 +70,7 @@ For larger features, group plans into Epics:
 - **Attach Plan:** `bun run wf epic attach <epic-id> <plan-id>`
 - **Run Orchestrator:** `bun run wf epic run <id>`
 - **Status:** `bun run wf epic status <id>`
+- **Validate Scope Mapping:** `bun run wf epic validate <id>`
 
 ---
 
@@ -114,6 +115,7 @@ wf epic attach <epic-id> <plan-id>
 wf epic list --json
 wf epic run <id> [--json]
 wf epic status <id> [--json]
+wf epic validate <id> [--json]
 wf epic resume <id> [--json]
 wf epic stop <id> [--json]
 
@@ -121,9 +123,17 @@ wf plan "<description>"
 wf plan "<description>" --epic <epic-id>
 wf code <id>
 wf context <id> --json --include=plan,todo,review,evidence,state,epic
+wf project "Desktop app for local AI meeting analysis" --product "Aftermeet" --users "Founders;Teams"
+wf log "Implemented X" --phase coding --implemented "A;B" --next "C"
+wf recap --limit 8
+# multi-product mono-repo scope isolation
+wf project "Aftermeet brief" --scope aftermeet --product "Aftermeet"
+wf log "Updated vision pipeline" --scope aftermeet
+wf recap --scope aftermeet --limit 8
 wf verify <id> --target=all --json
 wf finish-code <id>
 wf review <id>
+wf review <id> --strict [--profile fast|default|full] [--json]
 wf fix <id>
 wf done <id>
 

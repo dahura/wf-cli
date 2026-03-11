@@ -9,6 +9,7 @@ Creates and manages higher-level epics that group multiple plans. The `/epic run
 - `/epic list --json`
 - `/epic run <epic-id-or-slug> [--json]`
 - `/epic status <epic-id-or-slug> [--json]`
+- `/epic validate <epic-id-or-slug> [--json]`
 - `/epic resume <epic-id-or-slug> [--json]`
 - `/epic stop <epic-id-or-slug> [--json]`
 
@@ -40,7 +41,7 @@ For each plan, run this loop until the plan becomes `completed`:
    - Coder must call `/finish-code <plan-id>` when TODOs are implemented.
 
 2. **Review path**
-   - If phase is `awaiting_review`, run `/review <plan-id>`, then invoke `@plan-reviewer`.
+   - If phase is `awaiting_review`, run `/review <plan-id> --strict --profile default`, then invoke `@plan-reviewer`.
    - Reviewer must call `/done <plan-id>` when clean.
    - If reviewer reports issues in epic orchestration mode, continue automatically to fix loop (do not ask user to run `/fix`).
 
@@ -62,8 +63,9 @@ For each plan, run this loop until the plan becomes `completed`:
 ### Step 4 — Completion
 
 1. Run: `bun run wf epic status <id> --json`
-2. Confirm all linked plans are `completed`
-3. Report completion summary
+2. Run: `bun run wf epic validate <id> --json`
+3. Confirm all linked plans are `completed` and scope mismatch is false
+4. Report completion summary
 
 ---
 
@@ -75,7 +77,12 @@ For each plan, run this loop until the plan becomes `completed`:
 ## `/epic status <id>`
 
 - Run: `bun run wf epic status <id> --json`
-- Display epic phase, orchestration status, and plan phases
+- Display epic phase, orchestration status, plan phases, and scope mismatch fields
+
+## `/epic validate <id>`
+
+- Run: `bun run wf epic validate <id> --json`
+- Fail orchestration completion if scope mismatch is reported
 
 ## `/epic stop <id>`
 

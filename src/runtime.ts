@@ -18,6 +18,7 @@ import {
   readEpicContext,
   resumeEpicOrchestration,
   runEpicOrchestration,
+  validateEpicScope,
   resolveEpic,
   stopEpicOrchestration,
 } from "./core/epics";
@@ -29,7 +30,7 @@ import {
   resolveStatePath,
   type SessionCommand,
 } from "./core/session";
-import { exists, readJson, readText } from "./core/io";
+import { exists, readJson, readText, writeText } from "./core/io";
 import { verifyPlanQuality, type VerifyTarget } from "./core/verify";
 import {
   applySubagentModelConfig,
@@ -57,17 +58,138 @@ import {
   writeRuntimeConfig,
 } from "./core/runtime-config";
 import { ensureAutoWorkers } from "./core/auto-workers";
+import { runStrictQualityChecks, type StrictProfile } from "./core/quality-run";
+import { appendProjectMemory, readProjectMemoryRecap } from "./core/project-memory";
+import { readProjectBrief, upsertProjectBrief } from "./core/project-brief";
+
+function isHelpToken(value: string | undefined): boolean {
+  return value === "--help" || value === "-h";
+}
+
+function renderGlobalHelp(): string {
+  return [
+    "Usage: wf <command> [options]",
+    "",
+    "Commands:",
+    "  who-are-you                         Show current model and capabilities",
+    "  models                              List enabled models and capabilities",
+    "  set-model <id>                      Initialize model for this session",
+    "  update-model <id>                   Update locked session model",
+    "  context <plan> [--json]             Show plan context and allowed commands",
+    "  project \"<summary>\" [options]      Set project brief for fresh agent context",
+    "  log \"<summary>\" [options]          Append project memory entry",
+    "  recap [--limit N] [--json]          Show compact recent project memory",
+    "  verify <plan> [--target ...]        Verify plan quality gates",
+    "  plan \"<name>\" [--epic <id|slug>]   Create a plan",
+    "  code <plan>                         Move plan to coding (or enqueue job)",
+    "  finish-code <plan>                  Validate and move plan to review-ready",
+    "  review <plan> [--strict]            Move plan to reviewing",
+    "  fix <plan>                          Move plan to fixing (or enqueue job)",
+    "  done <plan>                         Mark plan as completed",
+    "  todo <action> ...                   Manage TODO lifecycle",
+    "  epic <action> ...                   Manage epic lifecycle/orchestration",
+    "  worker <role> [options]             Run a single worker loop",
+    "  workers start                       Show worker bootstrap guidance",
+    "  subagents <action>                  Manage subagent model configuration",
+    "  config <show|init|set>              Manage runtime config",
+    "  init [--force]                      Initialize workflow scaffold",
+    "  sync [--reseed]                     Sync workflow templates/files",
+    "  skill sync                          Sync skills",
+    "",
+    "Run 'wf <command> --help' for command-specific usage.",
+  ].join("\n");
+}
+
+function renderCommandHelp(command: string): string | null {
+  switch (command) {
+    case "who-are-you":
+      return "Usage: wf who-are-you";
+    case "models":
+      return "Usage: wf models";
+    case "set-model":
+      return "Usage: wf set-model <model-id>";
+    case "update-model":
+      return "Usage: wf update-model <model-id>";
+    case "context":
+      return "Usage: wf context <id|slug> [--json] [--include=plan,todo,review,evidence,state,epic]";
+    case "project":
+      return "Usage: wf project \"<summary>\" [--scope <name>] [--product \"...\"] [--users \"...\"] [--stack \"...\"] [--constraints \"a;b\"] [--success \"a;b\"] [--json]";
+    case "log":
+      return "Usage: wf log \"<summary>\" [--scope <name>] [--phase <name>] [--about \"...\"] [--implemented \"a;b\"] [--next \"a;b\"] [--json]";
+    case "recap":
+      return "Usage: wf recap [--scope <name>] [--limit <n>] [--json]";
+    case "verify":
+      return "Usage: wf verify <id|slug> [--target=all|review|done] [--strict] [--json]";
+    case "plan":
+      return "Usage: wf plan \"<name>\" [--epic <id|slug>]";
+    case "code":
+      return "Usage: wf code <id|slug>";
+    case "finish-code":
+      return "Usage: wf finish-code <id|slug>";
+    case "review":
+      return "Usage: wf review <id|slug> [--strict] [--profile fast|default|full] [--json]";
+    case "fix":
+      return "Usage: wf fix <id|slug>";
+    case "done":
+      return "Usage: wf done <id|slug>";
+    case "todo":
+      return [
+        "Usage:",
+        "  wf todo list <plan> [--json]",
+        "  wf todo implemented <plan> <todo-id> --test \"<command>\" --output \"<result>\" [--note \"...\"] [--json]",
+        "  wf todo accept <plan> <todo-id> [--note \"...\"] [--json]",
+        "  wf todo reject <plan> <todo-id> [--reason \"...\"] [--json]",
+      ].join("\n");
+    case "epic":
+      return [
+        "Usage:",
+        "  wf epic create \"<name>\"",
+        "  wf epic list [--json]",
+        "  wf epic context <id|slug> [--json]",
+        "  wf epic attach <epic-id> <plan-id>",
+        "  wf epic run <id|slug> [--json] [--auto-workers|--no-auto-workers]",
+        "  wf epic resume <id|slug> [--json] [--auto-workers|--no-auto-workers]",
+        "  wf epic status <id|slug> [--json]",
+        "  wf epic validate <id|slug> [--json]",
+        "  wf epic watch <id|slug>",
+        "  wf epic stop <id|slug> [--json]",
+      ].join("\n");
+    case "worker":
+      return "Usage: wf worker <coding|fixing> [--runtime <name>] [--id <worker-id>] [--poll-ms <n>] [--lease-ms <n>] [--max-jobs <n>]";
+    case "workers":
+      return "Usage: wf workers start";
+    case "subagents":
+      return "Usage: wf subagents <init-models|init-model-catalog|validate-models|show-models|apply-models|list-models> [--json]";
+    case "config":
+      return "Usage: wf config <show|init|set> [args] [--json]\n       wf config set <distributed|auto-workers> <true|false> [--json]";
+    case "init":
+      return "Usage: wf init [--force]";
+    case "sync":
+      return "Usage: wf sync [--reseed]";
+    case "skill":
+      return "Usage: wf skill sync";
+    case "help":
+      return renderGlobalHelp();
+    default:
+      return null;
+  }
+}
 
 function parseVerifyArgs(values: string[]) {
   let planRef: string | undefined;
   let asJson = false;
   let target: VerifyTarget = "all";
+  let strict = false;
 
   for (let i = 0; i < values.length; i += 1) {
     const token = values[i];
 
     if (token === "--json") {
       asJson = true;
+      continue;
+    }
+    if (token === "--strict") {
+      strict = true;
       continue;
     }
 
@@ -107,7 +229,7 @@ function parseVerifyArgs(values: string[]) {
     planRef = token;
   }
 
-  return { planRef, asJson, target };
+  return { planRef, asJson, target, strict };
 }
 
 function parsePlanArgs(values: string[]) {
@@ -145,6 +267,56 @@ function parsePlanArgs(values: string[]) {
   return { name, epicRef };
 }
 
+function parseReviewArgs(values: string[]) {
+  let planRef: string | undefined;
+  let strict = false;
+  let asJson = false;
+  let profile: StrictProfile = "default";
+
+  for (let i = 0; i < values.length; i += 1) {
+    const token = values[i];
+    if (!token) continue;
+
+    if (token === "--strict") {
+      strict = true;
+      continue;
+    }
+    if (token === "--json") {
+      asJson = true;
+      continue;
+    }
+    if (token === "--profile") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) {
+        return { error: "Option '--profile' requires value: fast|default|full." };
+      }
+      if (value !== "fast" && value !== "default" && value !== "full") {
+        return { error: `Unknown profile '${value}'. Allowed: fast|default|full.` };
+      }
+      profile = value as StrictProfile;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--profile=")) {
+      const value = token.slice("--profile=".length);
+      if (value !== "fast" && value !== "default" && value !== "full") {
+        return { error: `Unknown profile '${value}'. Allowed: fast|default|full.` };
+      }
+      profile = value as StrictProfile;
+      continue;
+    }
+    if (token.startsWith("--")) {
+      return { error: `Unknown option '${token}'.` };
+    }
+    if (planRef) {
+      return { error: `Unexpected extra argument '${token}'.` };
+    }
+    planRef = token;
+  }
+
+  return { planRef, strict, profile, asJson };
+}
+
 function parseEpicArgs(values: string[]) {
   const first = values[0];
   if (!first) {
@@ -174,7 +346,14 @@ function parseEpicArgs(values: string[]) {
     return { action: "list" as const, asJson };
   }
 
-  if (first === "run" || first === "status" || first === "resume" || first === "stop" || first === "watch") {
+  if (
+    first === "run" ||
+    first === "status" ||
+    first === "resume" ||
+    first === "stop" ||
+    first === "watch" ||
+    first === "validate"
+  ) {
     let epicRef: string | undefined;
     let asJson = false;
     let autoWorkers: boolean | undefined;
@@ -227,7 +406,7 @@ function parseEpicArgs(values: string[]) {
   if (first.startsWith("--")) {
     return {
       action: "invalid" as const,
-      error: `Unknown flag '${first}'. Usage: wf epic <run|resume|status|stop|list|context|attach|"<name>">`,
+      error: `Unknown flag '${first}'. Usage: wf epic <run|resume|status|validate|stop|list|context|attach|"<name>">`,
     };
   }
   return { action: "create" as const, name: first };
@@ -385,6 +564,254 @@ function parseConfigArgs(values: string[]) {
   return { action, asJson, key, value: parsed } as const;
 }
 
+function parseDelimitedList(value: string): string[] {
+  return value
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseLogArgs(values: string[]) {
+  let summary: string | undefined;
+  let phase: string | undefined;
+  let about: string | undefined;
+  let scope: string | undefined;
+  let asJson = false;
+  let implemented: string[] = [];
+  let next: string[] = [];
+
+  for (let i = 0; i < values.length; i += 1) {
+    const token = values[i];
+    if (!token) continue;
+
+    if (token === "--json") {
+      asJson = true;
+      continue;
+    }
+    if (token === "--scope") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--scope' requires value.", asJson };
+      scope = value;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--scope=")) {
+      scope = token.slice("--scope=".length);
+      continue;
+    }
+
+    if (token === "--phase") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--phase' requires value.", asJson };
+      phase = value;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--phase=")) {
+      phase = token.slice("--phase=".length);
+      continue;
+    }
+
+    if (token === "--about") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--about' requires value.", asJson };
+      about = value;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--about=")) {
+      about = token.slice("--about=".length);
+      continue;
+    }
+
+    if (token === "--implemented") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--implemented' requires value.", asJson };
+      implemented = parseDelimitedList(value);
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--implemented=")) {
+      implemented = parseDelimitedList(token.slice("--implemented=".length));
+      continue;
+    }
+
+    if (token === "--next") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--next' requires value.", asJson };
+      next = parseDelimitedList(value);
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--next=")) {
+      next = parseDelimitedList(token.slice("--next=".length));
+      continue;
+    }
+
+    if (token.startsWith("--")) {
+      return { error: `Unknown option '${token}'.`, asJson };
+    }
+
+    if (summary) {
+      return { error: `Unexpected extra argument '${token}'. Provide a single summary string.`, asJson };
+    }
+    summary = token;
+  }
+
+  return { summary, scope, phase, about, implemented, next, asJson };
+}
+
+function parseRecapArgs(values: string[]) {
+  let asJson = false;
+  let limit = 8;
+  let scope: string | undefined;
+
+  for (let i = 0; i < values.length; i += 1) {
+    const token = values[i];
+    if (!token) continue;
+
+    if (token === "--json") {
+      asJson = true;
+      continue;
+    }
+    if (token === "--scope") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--scope' requires value.", asJson };
+      scope = value;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--scope=")) {
+      scope = token.slice("--scope=".length);
+      continue;
+    }
+    if (token === "--limit") {
+      const value = values[i + 1];
+      const parsed = Number(value);
+      if (!value || value.startsWith("--") || !Number.isFinite(parsed) || parsed <= 0) {
+        return { error: "Option '--limit' requires a positive integer.", asJson };
+      }
+      limit = Math.floor(parsed);
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--limit=")) {
+      const parsed = Number(token.slice("--limit=".length));
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return { error: "Option '--limit' requires a positive integer.", asJson };
+      }
+      limit = Math.floor(parsed);
+      continue;
+    }
+    if (token.startsWith("--")) {
+      return { error: `Unknown option '${token}'.`, asJson };
+    }
+    return {
+      error: `Unexpected argument '${token}'. Usage: wf recap [--scope name] [--limit N] [--json]`,
+      asJson,
+    };
+  }
+
+  return { asJson, limit, scope };
+}
+
+function parseProjectArgs(values: string[]) {
+  let summary: string | undefined;
+  let product: string | undefined;
+  let users: string | undefined;
+  let stack: string | undefined;
+  let scope: string | undefined;
+  let constraints: string[] = [];
+  let successCriteria: string[] = [];
+  let asJson = false;
+
+  for (let i = 0; i < values.length; i += 1) {
+    const token = values[i];
+    if (!token) continue;
+
+    if (token === "--json") {
+      asJson = true;
+      continue;
+    }
+    if (token === "--scope") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--scope' requires value.", asJson };
+      scope = value;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--scope=")) {
+      scope = token.slice("--scope=".length);
+      continue;
+    }
+    if (token === "--product") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--product' requires value.", asJson };
+      product = value;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--product=")) {
+      product = token.slice("--product=".length);
+      continue;
+    }
+    if (token === "--users") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--users' requires value.", asJson };
+      users = value;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--users=")) {
+      users = token.slice("--users=".length);
+      continue;
+    }
+    if (token === "--stack") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--stack' requires value.", asJson };
+      stack = value;
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--stack=")) {
+      stack = token.slice("--stack=".length);
+      continue;
+    }
+    if (token === "--constraints") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--constraints' requires value.", asJson };
+      constraints = parseDelimitedList(value);
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--constraints=")) {
+      constraints = parseDelimitedList(token.slice("--constraints=".length));
+      continue;
+    }
+    if (token === "--success") {
+      const value = values[i + 1];
+      if (!value || value.startsWith("--")) return { error: "Option '--success' requires value.", asJson };
+      successCriteria = parseDelimitedList(value);
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--success=")) {
+      successCriteria = parseDelimitedList(token.slice("--success=".length));
+      continue;
+    }
+    if (token.startsWith("--")) {
+      return { error: `Unknown option '${token}'.`, asJson };
+    }
+
+    if (summary) {
+      return { error: `Unexpected extra argument '${token}'. Provide one summary string.`, asJson };
+    }
+    summary = token;
+  }
+
+  return { summary, scope, product, users, stack, constraints, successCriteria, asJson };
+}
+
 function parseTodoArgs(values: string[]) {
   const action = values[0];
   if (!action || (action !== "list" && action !== "implemented" && action !== "accept" && action !== "reject")) {
@@ -478,14 +905,60 @@ function hasAnyCapability(current: Capability[], required: Capability[]): boolea
   return required.some((capability) => current.includes(capability));
 }
 
+async function upsertStrictReviewMetadata(planDirPath: string, profile: StrictProfile): Promise<void> {
+  const reviewPath = join(planDirPath, "review.md");
+  const current = (await exists(reviewPath)) ? await readText(reviewPath) : "# Review\n";
+  const lines = current.trimEnd().split("\n");
+  let hasStrict = false;
+  let hasProfile = false;
+  let hasArtifact = false;
+
+  const next = lines.map((line) => {
+    if (/^\s*-\s*strict:\s*/i.test(line)) {
+      hasStrict = true;
+      return "- strict: true";
+    }
+    if (/^\s*-\s*strict_profile:\s*/i.test(line)) {
+      hasProfile = true;
+      return `- strict_profile: ${profile}`;
+    }
+    if (/^\s*-\s*quality_artifact:\s*/i.test(line)) {
+      hasArtifact = true;
+      return "- quality_artifact: quality-run.json";
+    }
+    return line;
+  });
+
+  if (!hasStrict) next.push("- strict: true");
+  if (!hasProfile) next.push(`- strict_profile: ${profile}`);
+  if (!hasArtifact) next.push("- quality_artifact: quality-run.json");
+
+  await writeText(reviewPath, `${next.join("\n").trimEnd()}\n`);
+}
+
 export async function runRuntime(rawArgs: string[]) {
   const cwd = process.cwd();
   const statePath = await resolveStatePath(cwd);
   await initSession(statePath);
 
-  const command = rawArgs[0] as SessionCommand;
+  const command = rawArgs[0];
   const commandArgs = rawArgs.slice(1);
   const arg = commandArgs[0];
+
+  if (!command || command === "help" || isHelpToken(command)) {
+    console.log(renderGlobalHelp());
+    process.exit(0);
+  }
+
+  if (commandArgs.some((token) => isHelpToken(token))) {
+    const help = renderCommandHelp(command);
+    if (help) {
+      console.log(help);
+      process.exit(0);
+    }
+    console.error(`❌ Unknown command '${command}'.`);
+    process.exit(1);
+  }
 
   if (command === "who-are-you") {
     const state = await readSessionState(statePath);
@@ -635,6 +1108,165 @@ export async function runRuntime(rawArgs: string[]) {
     process.exit(0);
   }
 
+  if (command === "project") {
+    const parsed = parseProjectArgs(commandArgs);
+    if ("error" in parsed) {
+      const payload = { ok: false, error: "INVALID_ARGS", message: parsed.error };
+      if (parsed.asJson) {
+        console.error(JSON.stringify(payload, null, 2));
+      } else {
+        console.error(`❌ ${parsed.error}`);
+      }
+      process.exit(1);
+    }
+    if (!parsed.summary || parsed.summary.trim().length === 0) {
+      const message =
+        "Summary is required. Usage: wf project \"<summary>\" [--scope <name>] [--product \"...\"] [--users \"...\"] [--stack \"...\"] [--constraints \"a;b\"] [--success \"a;b\"]";
+      const payload = { ok: false, error: "INVALID_ARGS", message };
+      if (parsed.asJson) {
+        console.error(JSON.stringify(payload, null, 2));
+      } else {
+        console.error(`❌ ${message}`);
+      }
+      process.exit(1);
+    }
+
+    const brief = await upsertProjectBrief(cwd, {
+      summary: parsed.summary,
+      ...(parsed.product ? { product: parsed.product } : {}),
+      ...(parsed.users ? { users: parsed.users } : {}),
+      ...(parsed.stack ? { stack: parsed.stack } : {}),
+      ...(parsed.constraints.length > 0 ? { constraints: parsed.constraints } : {}),
+      ...(parsed.successCriteria.length > 0 ? { successCriteria: parsed.successCriteria } : {}),
+    }, {
+      ...(parsed.scope ? { scope: parsed.scope } : {}),
+    });
+
+    if (parsed.asJson) {
+      console.log(JSON.stringify({ ok: true, action: "project", brief }, null, 2));
+    } else {
+      console.log(`✅ Project brief updated${parsed.scope ? ` (scope: ${parsed.scope})` : ""}.`);
+    }
+    process.exit(0);
+  }
+
+  if (command === "log") {
+    const parsed = parseLogArgs(commandArgs);
+    if ("error" in parsed) {
+      const payload = { ok: false, error: "INVALID_ARGS", message: parsed.error };
+      if (parsed.asJson) {
+        console.error(JSON.stringify(payload, null, 2));
+      } else {
+        console.error(`❌ ${parsed.error}`);
+      }
+      process.exit(1);
+    }
+    if (!parsed.summary || parsed.summary.trim().length === 0) {
+      const message =
+        "Summary is required. Usage: wf log \"<summary>\" [--scope <name>] [--phase <name>] [--about \"...\"] [--implemented \"a;b\"] [--next \"a;b\"]";
+      const payload = { ok: false, error: "INVALID_ARGS", message };
+      if (parsed.asJson) {
+        console.error(JSON.stringify(payload, null, 2));
+      } else {
+        console.error(`❌ ${message}`);
+      }
+      process.exit(1);
+    }
+
+    const entry = await appendProjectMemory(cwd, {
+      summary: parsed.summary,
+      ...(parsed.phase ? { phase: parsed.phase } : {}),
+      ...(parsed.about ? { about: parsed.about } : {}),
+      ...(parsed.implemented.length > 0 ? { implemented: parsed.implemented } : {}),
+      ...(parsed.next.length > 0 ? { next: parsed.next } : {}),
+    }, {
+      ...(parsed.scope ? { scope: parsed.scope } : {}),
+    });
+
+    if (parsed.asJson) {
+      console.log(JSON.stringify({ ok: true, action: "log", entry }, null, 2));
+    } else {
+      console.log(`✅ Memory entry logged (${entry.id})${parsed.scope ? ` [scope: ${parsed.scope}]` : ""}.`);
+    }
+    process.exit(0);
+  }
+
+  if (command === "recap") {
+    const parsed = parseRecapArgs(commandArgs);
+    if ("error" in parsed) {
+      const payload = { ok: false, error: "INVALID_ARGS", message: parsed.error };
+      if (parsed.asJson) {
+        console.error(JSON.stringify(payload, null, 2));
+      } else {
+        console.error(`❌ ${parsed.error}`);
+      }
+      process.exit(1);
+    }
+
+    const [brief, recap] = await Promise.all([
+      readProjectBrief(cwd, {
+        ...(parsed.scope ? { scope: parsed.scope } : {}),
+      }),
+      readProjectMemoryRecap(cwd, parsed.limit, {
+        ...(parsed.scope ? { scope: parsed.scope } : {}),
+      }),
+    ]);
+    const payload = {
+      ok: true,
+      action: "recap",
+      project_brief: brief,
+      total_entries: recap.total,
+      entries: recap.entries,
+      paths: recap.paths,
+    };
+
+    if (parsed.asJson) {
+      console.log(JSON.stringify(payload, null, 2));
+    } else {
+      if (parsed.scope) {
+        console.log(`Scope: ${parsed.scope}`);
+        console.log("");
+      }
+      if (brief) {
+        console.log("Project brief:");
+        console.log(`- summary: ${brief.summary}`);
+        if (brief.product) console.log(`- product: ${brief.product}`);
+        if (brief.users) console.log(`- users: ${brief.users}`);
+        if (brief.stack) console.log(`- stack: ${brief.stack}`);
+        if (brief.constraints.length > 0) {
+          console.log(`- constraints: ${brief.constraints.join("; ")}`);
+        }
+        if (brief.successCriteria.length > 0) {
+          console.log(`- success_criteria: ${brief.successCriteria.join("; ")}`);
+        }
+        console.log("");
+      } else {
+        console.log(
+          "No project brief yet. Add one via: wf project \"<summary>\" --product \"...\" --users \"...\"",
+        );
+        console.log("");
+      }
+
+      console.log(`Project memory entries: ${recap.total}`);
+      if (recap.entries.length === 0) {
+        console.log("No memory entries yet. Add one via: wf log \"<summary>\"");
+      } else {
+        for (const entry of recap.entries) {
+          console.log(`- [${entry.timestamp}] ${entry.summary}`);
+          if (entry.phase) console.log(`  phase: ${entry.phase}`);
+          if (entry.about) console.log(`  about: ${entry.about}`);
+          if (entry.implemented.length > 0) {
+            console.log(`  implemented: ${entry.implemented.join("; ")}`);
+          }
+          if (entry.next.length > 0) {
+            console.log(`  next: ${entry.next.join("; ")}`);
+          }
+        }
+      }
+    }
+    process.exit(0);
+  }
+
   if (command === "verify") {
     const parsed = parseVerifyArgs(commandArgs);
     if ("error" in parsed) {
@@ -652,7 +1284,7 @@ export async function runRuntime(rawArgs: string[]) {
         ok: false,
         error: "INVALID_ARGS",
         message:
-          "Plan reference is required. Usage: wf verify <id|slug> [--target=all|review|done] [--json]",
+          "Plan reference is required. Usage: wf verify <id|slug> [--target=all|review|done] [--strict] [--json]",
       };
       if (parsed.asJson) {
         console.error(JSON.stringify(payload, null, 2));
@@ -678,13 +1310,16 @@ export async function runRuntime(rawArgs: string[]) {
       process.exit(1);
     }
 
-    const verification = await verifyPlanQuality(plan.dirPath, parsed.target);
+    const verification = await verifyPlanQuality(plan.dirPath, parsed.target, {
+      strict: parsed.strict,
+    });
     const payload = {
       ok: verification.ok,
       input: parsed.planRef,
       id: plan.id,
       resolved_plan_dir: join("plans", plan.dirName),
       target: parsed.target,
+      strict: parsed.strict,
       checks: verification.checks,
     };
 
@@ -708,6 +1343,13 @@ export async function runRuntime(rawArgs: string[]) {
       if (done) {
         console.log(`- done gate: ${done.ok ? "pass" : "fail"}`);
         for (const error of done.errors) {
+          console.log(`  - ${error}`);
+        }
+      }
+      const strict = verification.checks.strict;
+      if (strict) {
+        console.log(`- strict gate: ${strict.ok ? "pass" : "fail"}`);
+        for (const error of strict.errors) {
           console.log(`  - ${error}`);
         }
       }
@@ -917,8 +1559,62 @@ export async function runRuntime(rawArgs: string[]) {
         console.log(`Phase: ${status.epic_phase}`);
         console.log(`Orchestration: ${status.orchestration.status}`);
         console.log(`Plans total: ${status.total_plans}`);
+        console.log(`Scope declared: ${status.scope_plans_declared}`);
+        console.log(`Linked plans: ${status.linked_plans}`);
+        console.log(`Scope mismatch: ${status.scope_mismatch ? "yes" : "no"}`);
       }
       process.exit(0);
+    }
+
+    if (parsed.action === "validate") {
+      const epic = await resolveEpic(cwd, parsed.epicRef);
+      if (!epic) {
+        console.error(`❌ Epic '${parsed.epicRef}' not found.`);
+        process.exit(1);
+      }
+      const validation = await validateEpicScope(epic);
+      const payload = {
+        ok: !validation.scope_mismatch,
+        action: "validate",
+        epic_id: epic.id,
+        scope_plans_declared: validation.declared_plans.length,
+        linked_plans: validation.linked_plans.length,
+        scope_mismatch: validation.scope_mismatch,
+        missing_links: validation.missing_links,
+        extra_links: validation.extra_links,
+        warnings: validation.warnings,
+      };
+      if (parsed.asJson) {
+        if (payload.ok) {
+          console.log(JSON.stringify(payload, null, 2));
+        } else {
+          console.error(JSON.stringify(payload, null, 2));
+        }
+      } else {
+        console.log(`Epic: ${epic.id}`);
+        console.log(`Declared scope plans: ${payload.scope_plans_declared}`);
+        console.log(`Linked plans: ${payload.linked_plans}`);
+        console.log(`Scope mismatch: ${payload.scope_mismatch ? "yes" : "no"}`);
+        if (payload.missing_links.length > 0) {
+          console.log("Missing linked plans:");
+          for (const missing of payload.missing_links) {
+            console.log(`- ${missing.label}`);
+          }
+        }
+        if (payload.extra_links.length > 0) {
+          console.log("Extra linked plans (not declared in scope):");
+          for (const extra of payload.extra_links) {
+            console.log(`- ${extra}`);
+          }
+        }
+        if (payload.warnings.length > 0) {
+          console.log("Warnings:");
+          for (const warning of payload.warnings) {
+            console.log(`- ${warning}`);
+          }
+        }
+      }
+      process.exit(payload.ok ? 0 : 1);
     }
 
     if (parsed.action === "resume") {
@@ -1417,7 +2113,7 @@ export async function runRuntime(rawArgs: string[]) {
   }
 
   const sessionState = await readSessionState(statePath);
-  const sessionResult = guardSession(sessionState, command);
+  const sessionResult = guardSession(sessionState, command as SessionCommand);
   if (!sessionResult.allowed) {
     console.error(`❌ ${sessionResult.reason}`);
     process.exit(1);
@@ -1606,16 +2302,64 @@ export async function runRuntime(rawArgs: string[]) {
     }
   }
 
-  if (command === "review" && arg) {
-    const plan = await resolvePlan(cwd, arg);
+  if (command === "review") {
+    const parsed = parseReviewArgs(commandArgs);
+    if ("error" in parsed) {
+      console.error(`❌ ${parsed.error}`);
+      process.exit(1);
+    }
+    if (!parsed.planRef) {
+      console.error("❌ Plan reference is required. Usage: wf review <id|slug> [--strict] [--profile fast|default|full] [--json]");
+      process.exit(1);
+    }
+
+    const plan = await resolvePlan(cwd, parsed.planRef);
     if (!plan) {
-      console.error(`❌ Plan ${arg} not found.`);
+      console.error(`❌ Plan ${parsed.planRef} not found.`);
       process.exit(1);
     }
     try {
       await startReview(plan.dirPath);
+
+      let strictArtifact: Awaited<ReturnType<typeof runStrictQualityChecks>> | null = null;
+      if (parsed.strict) {
+        await upsertStrictReviewMetadata(plan.dirPath, parsed.profile);
+        strictArtifact = await runStrictQualityChecks({
+          cwd,
+          planDirPath: plan.dirPath,
+          planRef: plan.id,
+          profile: parsed.profile,
+        });
+      }
+
       await publishPlanPhaseJobs(cwd, plan.dirName);
-      console.log(`✅ Plan ${plan.id} entered reviewing phase.`);
+
+      if (parsed.asJson) {
+        const payload = {
+          ok: true,
+          id: plan.id,
+          resolved_plan_dir: join("plans", plan.dirName),
+          phase: "reviewing",
+          strict: parsed.strict,
+          strict_profile: parsed.profile,
+          strict_ok: strictArtifact ? strictArtifact.ok : null,
+        };
+        if (strictArtifact && !strictArtifact.ok) {
+          console.error(JSON.stringify({ ...payload, ok: false, error: "STRICT_CHECK_FAILED" }, null, 2));
+          process.exit(1);
+        }
+        console.log(JSON.stringify(payload, null, 2));
+      } else {
+        console.log(`✅ Plan ${plan.id} entered reviewing phase.`);
+        if (strictArtifact) {
+          if (strictArtifact.ok) {
+            console.log(`✅ Strict quality checks passed (${parsed.profile}).`);
+          } else {
+            console.error(`❌ Strict quality checks failed (${parsed.profile}).`);
+            process.exit(1);
+          }
+        }
+      }
       process.exit(0);
     } catch (err: any) {
       console.error(`❌ ${err.message}`);

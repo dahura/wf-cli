@@ -1,4 +1,4 @@
-import { validatePlanReadyForDone, validatePlanReadyForReview } from "./quality";
+import { validatePlanReadyForDone, validatePlanReadyForReview, validateStrictQualityArtifact } from "./quality";
 
 export type VerifyTarget = "all" | "review" | "done";
 
@@ -8,16 +8,19 @@ export type VerifyResult = {
   checks: {
     review: { ok: boolean; errors: string[] } | null;
     done: { ok: boolean; errors: string[] } | null;
+    strict: { ok: boolean; errors: string[] } | null;
   };
 };
 
 export async function verifyPlanQuality(
   planPath: string,
   target: VerifyTarget = "all",
+  options?: { strict?: boolean },
 ): Promise<VerifyResult> {
   const checks: VerifyResult["checks"] = {
     review: null,
     done: null,
+    strict: null,
   };
 
   if (target === "all" || target === "review") {
@@ -36,7 +39,15 @@ export async function verifyPlanQuality(
     };
   }
 
-  const ok = [checks.review, checks.done]
+  if (options?.strict) {
+    const strictGate = await validateStrictQualityArtifact(planPath);
+    checks.strict = {
+      ok: strictGate.ok,
+      errors: strictGate.errors,
+    };
+  }
+
+  const ok = [checks.review, checks.done, checks.strict]
     .filter((check): check is { ok: boolean; errors: string[] } => check !== null)
     .every((check) => check.ok);
 

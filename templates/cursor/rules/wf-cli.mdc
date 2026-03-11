@@ -20,8 +20,15 @@ When the user asks you to implement a feature, fix a bug, or do a task, follow t
    - Runs quality gates. Ensure `evidence.md` has matching `## <ID>` sections with `- status: pass`.
 4. **Finish Code:** `bun run wf finish-code <id>`
    - Locks the coding phase. Fails if TODOs or evidence are incomplete.
-5. **Review:** `bun run wf review <id>`
-   - Fill out `review.md` with verdicts for each TODO (e.g., `- [T1]: pass`).
+5. **Review:** `bun run wf review <id> --strict --profile default`
+   - Fill out `review.md` with findings-first output and per-TODO review sections:
+     - `## <TID>`
+     - `- intent_match: pass|fail|partial`
+     - `- behavior_match: pass|fail|partial`
+     - `- test_adequacy: pass|fail|partial`
+     - `- risk: low|medium|high`
+     - `- code_refs: <file/symbol references>`
+   - Include verdict lines for each TODO (e.g., `- [T1]: pass`).
 6. **Done:** `bun run wf done <id>`
    - Marks the plan as successfully completed.
 
@@ -29,6 +36,7 @@ When the user asks you to implement a feature, fix a bug, or do a task, follow t
 - Create epic: `bun run wf epic "<description>"`
 - Attach plan to epic: `bun run wf plan "<description>" --epic <epic-id>`
 - Check epic status: `bun run wf epic status <id>`
+- Validate epic scope mapping: `bun run wf epic validate <id>`
 - Run epic orchestrator: `bun run wf epic run <id>`
 
 ## 🛠️ Subagents & Models

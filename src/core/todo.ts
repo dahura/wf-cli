@@ -1,6 +1,7 @@
 import { join } from "path";
 import { exists, readJson, readText, writeText } from "./io";
 import { deriveTodoLifecycle, type TodoLifecycleItem } from "./todo-lifecycle";
+import { validateTodoReviewEvidence } from "./quality";
 
 type PlanState = {
   phase?: string;
@@ -173,6 +174,11 @@ export async function markTodoAccepted(
   if (!item) throw new Error(`TODO ID '${todoId}' not found in todo.md.`);
   if (!item.checked) {
     throw new Error(`TODO ID '${todoId}' must be implemented (checked) before acceptance.`);
+  }
+
+  const reviewEvidence = await validateTodoReviewEvidence(planDirPath, todoId);
+  if (!reviewEvidence.ok) {
+    throw new Error(`Cannot accept TODO '${todoId}' without complete review evidence: ${reviewEvidence.errors.join(" ")}`);
   }
 
   const reviewContent = (await exists(reviewPath)) ? await readText(reviewPath) : "";

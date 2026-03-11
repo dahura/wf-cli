@@ -98,7 +98,8 @@ describe("quality gates", () => {
       todo: "- [x] [T1] Implement feature\n- [x] [T2] Add tests\n",
       evidence:
         "## T1\n- status: pass\n- command: `bun test`\n- output: pass\n## T2\n- status: pass\n- command: `bun test`\n- output: pass\n",
-      review: "- [T1]: pass\n- [T2]: pass\n",
+      review:
+        "- [T1]: pass\n- [T2]: pass\n\n## T1\n- intent_match: pass\n- behavior_match: pass\n- test_adequacy: pass\n- risk: low\n- code_refs: src/a.ts\n\n## T2\n- intent_match: pass\n- behavior_match: pass\n- test_adequacy: pass\n- risk: medium\n- code_refs: src/b.ts\n",
     });
 
     const result = await validatePlanReadyForDone(planPath);
@@ -112,7 +113,8 @@ describe("quality gates", () => {
       todo: "- [x] [T1] Implement feature\n- [x] [T2] Add tests\n",
       evidence:
         "## T1\n- status: pass\n- command: `bun test`\n- output: pass\n## T2\n- status: pass\n- command: `bun test`\n- output: pass\n",
-      review: "- [T1]: pass\n- [T2]: fail\n",
+      review:
+        "- [T1]: pass\n- [T2]: fail\n\n## T1\n- intent_match: pass\n- behavior_match: pass\n- test_adequacy: pass\n- risk: low\n- code_refs: src/a.ts\n",
     });
 
     const result = await validatePlanReadyForDone(planPath);
@@ -130,6 +132,33 @@ describe("quality gates", () => {
     const result = await validatePlanReadyForDone(planPath);
     expect(result.ok).toBeFalse();
     expect(result.errors.some((error) => error.includes("review.md is missing"))).toBeTrue();
+  });
+
+  it("fails done gate when review contract block is missing for pass verdict", async () => {
+    const planPath = join(tempRoot, "plans", "01-sample");
+    await writePlanFiles(planPath, {
+      todo: "- [x] [T1] Implement feature\n",
+      evidence: "## T1\n- status: pass\n- command: `bun test`\n- output: pass\n",
+      review: "- [T1]: pass\n",
+    });
+
+    const result = await validatePlanReadyForDone(planPath);
+    expect(result.ok).toBeFalse();
+    expect(result.errors.some((error) => error.includes("missing detailed section"))).toBeTrue();
+  });
+
+  it("fails done gate in strict mode when quality-run artifact is missing", async () => {
+    const planPath = join(tempRoot, "plans", "01-sample");
+    await writePlanFiles(planPath, {
+      todo: "- [x] [T1] Implement feature\n",
+      evidence: "## T1\n- status: pass\n- command: `bun test`\n- output: pass\n",
+      review:
+        "- strict: true\n- [T1]: pass\n\n## T1\n- intent_match: pass\n- behavior_match: pass\n- test_adequacy: pass\n- risk: low\n- code_refs: src/a.ts\n",
+    });
+
+    const result = await validatePlanReadyForDone(planPath);
+    expect(result.ok).toBeFalse();
+    expect(result.errors.some((error) => error.includes("quality-run.json is missing"))).toBeTrue();
   });
 
   it("fails review gate when evidence command/output fields are missing", async () => {

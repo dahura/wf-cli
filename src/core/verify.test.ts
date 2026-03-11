@@ -33,7 +33,8 @@ describe("verifyPlanQuality", () => {
     await writePlanFiles(planPath, {
       todo: "- [x] [T1] Implement feature\n",
       evidence: "## T1\n- status: pass\n- command: `bun test`\n- output: pass\n",
-      review: "- [T1]: pass\n",
+      review:
+        "- [T1]: pass\n\n## T1\n- intent_match: pass\n- behavior_match: pass\n- test_adequacy: pass\n- risk: low\n- code_refs: src/a.ts\n",
     });
 
     const result = await verifyPlanQuality(planPath, "all");
@@ -68,5 +69,19 @@ describe("verifyPlanQuality", () => {
     expect(result.ok).toBeFalse();
     expect(result.checks.review).toBeNull();
     expect(result.checks.done?.ok).toBeFalse();
+  });
+
+  it("fails strict gate when quality-run artifact is missing", async () => {
+    const planPath = join(tempRoot, "plans", "01-sample");
+    await writePlanFiles(planPath, {
+      todo: "- [x] [T1] Implement feature\n",
+      evidence: "## T1\n- status: pass\n- command: `bun test`\n- output: pass\n",
+      review:
+        "- [T1]: pass\n\n## T1\n- intent_match: pass\n- behavior_match: pass\n- test_adequacy: pass\n- risk: low\n- code_refs: src/a.ts\n",
+    });
+
+    const result = await verifyPlanQuality(planPath, "all", { strict: true });
+    expect(result.ok).toBeFalse();
+    expect(result.checks.strict?.ok).toBeFalse();
   });
 });

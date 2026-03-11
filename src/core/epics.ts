@@ -174,30 +174,6 @@ export async function readEpicContext(epicPath: string) {
   return { epic, plansMap, report, state };
 }
 
-function extractScopePlanNames(epicMarkdown: string): string[] {
-  const lines = epicMarkdown.split(/\r?\n/);
-  const names: string[] = [];
-  let inScope = false;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith("## ")) {
-      inScope = trimmed.toLowerCase() === "## scope";
-      continue;
-    }
-    if (!inScope) continue;
-
-    const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/);
-    if (bulletMatch) {
-      const text = bulletMatch[1].trim();
-      if (text) names.push(text);
-      continue;
-    }
-  }
-
-  return [...new Set(names)].slice(0, 8);
-}
-
 function deriveFallbackPlanNames(epicMarkdown: string): string[] {
   const titleMatch = epicMarkdown.match(/^#\s*Epic:\s*(.+)$/m);
   const title = titleMatch?.[1]?.trim() || "Epic Delivery";
@@ -218,6 +194,78 @@ export type EpicPlanEntry = {
   phase: PlanPhase | "unknown";
 };
 
+export type ScopePlanDeclaration = {
+  order: number;
+  label: string;
+  title: string;
+  slug: string;
+};
+
+export type EpicScopeValidation = {
+  declared_plans: ScopePlanDeclaration[];
+  linked_plans: string[];
+  missing_links: ScopePlanDeclaration[];
+  extra_links: string[];
+  scope_mismatch: boolean;
+  warnings: string[];
+};
+
+function normalizeLinkedPlanSlug(planDirName: string): string {
+  return planDirName.replace(/^\d+-/, "");
+}
+
+function parseScopeDeclarations(epicMarkdown: string): { plans: ScopePlanDeclaration[]; warnings: string[] } {
+  const lines = epicMarkdown.split(/\r?\n/);
+  const plans: ScopePlanDeclaration[] = [];
+  const warnings: string[] = [];
+  let inScope = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("## ")) {
+      inScope = trimmed.toLowerCase() === "## scope";
+      continue;
+    }
+    if (!inScope) continue;
+
+    if (/^\s+[-*]\s+/.test(line)) {
+      continue;
+    }
+
+    const declarationMatch = line.match(/^-+\s+Plan\s+(\d{1,2})\s*:\s*(.+)\s*$/i);
+    if (declarationMatch) {
+      const order = parseInt(declarationMatch[1], 10);
+      const title = declarationMatch[2].trim();
+      const label = `Plan ${declarationMatch[1]}: ${title}`;
+      plans.push({
+        order,
+        label,
+        title,
+        slug: slugify(label),
+      });
+      continue;
+    }
+
+    if (/^-\s+/.test(line)) {
+      warnings.push(`Ignored non-plan scope bullet: ${trimmed}`);
+    }
+  }
+
+  const duplicateOrders = plans
+    .map((plan) => plan.order)
+    .filter((order, index, array) => array.indexOf(order) !== index);
+  if (duplicateOrders.length > 0) {
+    warnings.push(
+      `Duplicate scope plan numbers detected: ${[...new Set(duplicateOrders)].sort((a, b) => a - b).join(", ")}.`,
+    );
+  }
+
+  return {
+    plans: [...plans].sort((a, b) => a.order - b.order),
+    warnings,
+  };
+}
+
 export async function runEpicOrchestration(epic: ResolvedEpic) {
   const state = await readEpicState(epic.dirPath);
   const orchestration = ensureOrchestration(state);
@@ -230,7 +278,8 @@ export async function runEpicOrchestration(epic: ResolvedEpic) {
   let created = 0;
 
   if (currentPlanIds.length === 0) {
-    const planNames = extractScopePlanNames(epicMarkdown);
+    const { plans } = parseScopeDeclarations(epicMarkdown);
+    const planNames = plans.map((plan) => plan.label);
     const selectedPlanNames = planNames.length > 0 ? planNames : deriveFallbackPlanNames(epicMarkdown);
 
     for (const planName of selectedPlanNames) {
@@ -314,6 +363,29 @@ async function setEpicOrchestrationStatus(
   return updated;
 }
 
+export async function validateEpicScope(epic: ResolvedEpic): Promise<EpicScopeValidation> {
+  const state = await readEpicState(epic.dirPath);
+  const epicMarkdown = await readText(join(epic.dirPath, "epic.md"));
+  const { plans: declared, warnings } = parseScopeDeclarations(epicMarkdown);
+
+  const linkedPlans = [...state.plan_ids].sort();
+  const linkedBySlug = new Set(linkedPlans.map((plan) => normalizeLinkedPlanSlug(plan)));
+  const declaredBySlug = new Set(declared.map((plan) => plan.slug));
+
+  const missingLinks = declared.filter((plan) => !linkedBySlug.has(plan.slug));
+  const extraLinks = linkedPlans.filter((planDirName) => !declaredBySlug.has(normalizeLinkedPlanSlug(planDirName)));
+  const scopeMismatch = declared.length > 0 && (missingLinks.length > 0 || extraLinks.length > 0);
+
+  return {
+    declared_plans: declared,
+    linked_plans: linkedPlans,
+    missing_links: missingLinks,
+    extra_links: extraLinks,
+    scope_mismatch: scopeMismatch,
+    warnings,
+  };
+}
+
 export async function stopEpicOrchestration(epic: ResolvedEpic) {
   const state = await readEpicState(epic.dirPath);
   const status = ensureOrchestration(state).status;
@@ -349,6 +421,7 @@ export async function resumeEpicOrchestration(epic: ResolvedEpic) {
 export async function getEpicStatus(epic: ResolvedEpic) {
   const state = await readEpicState(epic.dirPath);
   const orchestration = ensureOrchestration(state);
+  const scopeValidation = await validateEpicScope(epic);
 
   const counts: Record<PlanPhase | "unknown", number> = {
     planning: 0,
@@ -376,7 +449,10 @@ export async function getEpicStatus(epic: ResolvedEpic) {
     counts[phase] += 1;
   }
 
-  const allCompleted = state.plan_ids.length > 0 && counts.completed === state.plan_ids.length;
+  const allCompleted =
+    state.plan_ids.length > 0 &&
+    counts.completed === state.plan_ids.length &&
+    !scopeValidation.scope_mismatch;
   const hasBlocked = counts.blocked > 0;
   const desiredPhase: EpicState["phase"] = allCompleted ? "completed" : hasBlocked ? "blocked" : "active";
   if (state.phase !== desiredPhase) {
@@ -421,6 +497,10 @@ export async function getEpicStatus(epic: ResolvedEpic) {
         : state,
     ),
     total_plans: state.plan_ids.length,
+    scope_plans_declared: scopeValidation.declared_plans.length,
+    linked_plans: scopeValidation.linked_plans.length,
+    scope_mismatch: scopeValidation.scope_mismatch,
+    scope_validation: scopeValidation,
     plans_by_phase: counts,
   };
 }

@@ -11,6 +11,7 @@ import {
   resumeEpicOrchestration,
   runEpicOrchestration,
   stopEpicOrchestration,
+  validateEpicScope,
 } from "./epics";
 
 describe("epics", () => {
@@ -80,5 +81,86 @@ describe("epics", () => {
     await resumeEpicOrchestration(resolved);
     status = await getEpicStatus(resolved);
     expect(status.orchestration.status).toBe("running");
+  });
+
+  it("captures all top-level Plan declarations without truncation", async () => {
+    const epic = await createEpic("Large scope");
+    const resolved = await resolveEpic(tempRoot, epic.number);
+    expect(resolved).not.toBeNull();
+    if (!resolved) throw new Error("Epic should resolve");
+
+    await Bun.write(
+      join(resolved.dirPath, "epic.md"),
+      `# Epic: Large scope
+
+## Scope
+- Plan 01: Alpha
+- Plan 02: Beta
+- Plan 03: Gamma
+- Plan 04: Delta
+- Plan 05: Epsilon
+- Plan 06: Zeta
+- Plan 07: Eta
+- Plan 08: Theta
+- Plan 09: Iota
+`,
+    );
+
+    const run = await runEpicOrchestration(resolved);
+    expect(run.created_plans).toBe(9);
+    expect(run.total_plans).toBe(9);
+  });
+
+  it("ignores nested bullets and flags mismatch for extra links", async () => {
+    const epic = await createEpic("Nested scope");
+    const resolved = await resolveEpic(tempRoot, epic.number);
+    expect(resolved).not.toBeNull();
+    if (!resolved) throw new Error("Epic should resolve");
+
+    await Bun.write(
+      join(resolved.dirPath, "epic.md"),
+      `# Epic: Nested scope
+
+## Scope
+- Plan 01: Core
+  - Nested detail 1
+  - Nested detail 2
+`,
+    );
+
+    await linkPlanToEpic(resolved.dirPath, "09-unrelated-plan");
+    const validation = await validateEpicScope(resolved);
+
+    expect(validation.declared_plans).toHaveLength(1);
+    expect(validation.scope_mismatch).toBe(true);
+    expect(validation.extra_links).toContain("09-unrelated-plan");
+  });
+
+  it("does not mark epic completed when scope mismatch exists", async () => {
+    const epic = await createEpic("Mismatch completion");
+    const resolved = await resolveEpic(tempRoot, epic.number);
+    expect(resolved).not.toBeNull();
+    if (!resolved) throw new Error("Epic should resolve");
+
+    await Bun.write(
+      join(resolved.dirPath, "epic.md"),
+      `# Epic: Mismatch completion
+
+## Scope
+- Plan 01: Declared
+`,
+    );
+
+    await linkPlanToEpic(resolved.dirPath, "05-not-declared");
+    await Bun.$`mkdir -p ${join(tempRoot, "plans", "05-not-declared")}`.quiet();
+    await Bun.write(
+      join(tempRoot, "plans", "05-not-declared", "state.json"),
+      JSON.stringify({ phase: "completed" }),
+    );
+
+    const status = await getEpicStatus(resolved);
+    expect(status.scope_mismatch).toBe(true);
+    expect(status.epic_phase).toBe("active");
+    expect(status.orchestration.status).not.toBe("completed");
   });
 });

@@ -22,12 +22,22 @@ You review one plan in `reviewing` phase and decide TODO acceptance quality.
    - behavior correctness
    - test quality (including edge/failure coverage)
    - evidence consistency
-5. For each TODO:
+5. Write/update `review.md` in findings-first format:
+   - list findings by severity (`critical`, `high`, `medium`, `low`) before summaries
+   - for each checked TODO ID `<TID>`, include a dedicated section:
+     - `## <TID>`
+     - `- intent_match: pass|fail|partial`
+     - `- behavior_match: pass|fail|partial`
+     - `- test_adequacy: pass|fail|partial`
+     - `- risk: low|medium|high`
+     - `- code_refs: <file/symbol references>`
+   - include verdict line for each checked TODO ID: `- [<TID>]: pass|fail|partial`
+6. For each TODO:
    - pass: `bun run wf todo accept <id> <TID>`
    - fail: `bun run wf todo reject <id> <TID> --reason "<clear issue>"`
-6. If any TODO rejected:
+7. If any TODO rejected:
    - ensure findings are written in `review.md`
    - stop without calling `done`
-7. If all TODOs accepted and no unresolved issues:
+8. If all TODOs accepted and no unresolved issues:
    - run `bun run wf done <id>`
    - stop.
